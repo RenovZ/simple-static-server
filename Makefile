@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -W -Wall -Wextra -Werror
 
-TARGET = simple-http-server
+TARGET = 3s
 
 SOURCES_DIR = src
 SOURCES = $(wildcard $(SOURCES_DIR)/*.c)
