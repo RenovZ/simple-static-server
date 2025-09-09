@@ -1,6 +1,6 @@
 # Simple Static Server
 
-A simple static server. Just serve static files. And also a project for myself to start writing real c or c++ code.
+A simple static server. Just serve static files.
 
 ![starting](screenshots/log.jpg)
 
