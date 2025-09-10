@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <getopt.h>
+#include <locale.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,10 +23,13 @@ void print_usage(char *name, u_short port) {
 }
 
 int main(int argc, char *argv[]) {
+  signal(SIGPIPE, SIG_IGN);
+  setlocale(LC_ALL, "");
+
   int opt;
   char *user = NULL;
   char *password = NULL;
-  // char *host = "0.0.0.0";
+  char *host = "0.0.0.0";
   u_short port = 8000;
   char *directory = ".";
 
@@ -47,7 +51,7 @@ int main(int argc, char *argv[]) {
       password = optarg;
       break;
     case 'H':
-      // host = optarg;
+      host = optarg;
       break;
     case 'P': {
       char *endptr;
@@ -80,9 +84,9 @@ int main(int argc, char *argv[]) {
 
   pthread_t newthread;
 
-  bind_listener_sock(&serversd, &port);
+  bind_listener_sock(&serversd, host, &port);
 
-  logmsg("%35s started on port %d, with socket %d", "", port, serversd);
+  logmsg("%35s started on %s:%d, with socket %d", "", host, port, serversd);
 
   while (1) {
     clientsd = accept(serversd, &clientsa, &clientsa_len);
@@ -98,8 +102,9 @@ int main(int argc, char *argv[]) {
     if (clientsd == -1)
       die("failed accepting request");
 
-    if (pthread_create(&newthread, NULL, handle_request, &params) != 0)
+    if (pthread_create(&newthread, NULL, handle_request, &params) != 0) {
       perror("failed creating thread");
+    }
   }
 
   close(serversd);

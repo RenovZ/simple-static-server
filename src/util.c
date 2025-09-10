@@ -11,6 +11,53 @@
 #include "misc.h"
 #include "util.h"
 
+// HTML escape function
+void html_escape(const char *src, char *dst, size_t size) {
+  size_t i = 0;
+  for (; *src && i + 6 < size; src++) { // reserve space for &xxxx;
+    switch (*src) {
+    case '&':
+      strcpy(dst + i, "&amp;");
+      i += 5;
+      break;
+    case '<':
+      strcpy(dst + i, "&lt;");
+      i += 4;
+      break;
+    case '>':
+      strcpy(dst + i, "&gt;");
+      i += 4;
+      break;
+    case '"':
+      strcpy(dst + i, "&quot;");
+      i += 6;
+      break;
+    default:
+      dst[i++] = *src;
+    }
+  }
+  dst[i] = '\0';
+}
+
+// URL encode function for href
+void encode_url(const char *src, char *dst, size_t size) {
+  static const char hex[] = "0123456789ABCDEF";
+  size_t i = 0;
+  for (; *src && i + 4 < size; src++) {
+    unsigned char c = *src;
+    if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') ||
+        ('0' <= c && c <= '9') || c == '-' || c == '_' || c == '.' ||
+        c == '~') {
+      dst[i++] = c;
+    } else {
+      dst[i++] = '%';
+      dst[i++] = hex[c >> 4];
+      dst[i++] = hex[c & 15];
+    }
+  }
+  dst[i] = '\0';
+}
+
 // decode %xx in URL
 void decode_url(char *dst, const char *src) {
   char a, b;

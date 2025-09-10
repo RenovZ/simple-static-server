@@ -7,6 +7,8 @@
 #define WITH_MICROSEC 2
 #define WITH_NANOSEC 3
 
+void html_escape(const char *src, char *dst, size_t size);
+void encode_url(const char *src, char *dst, size_t size);
 void decode_url(char *dst, const char *src);
 void die(const char *s);
 void logmsg(const char *format, ...);

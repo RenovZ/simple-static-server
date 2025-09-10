@@ -15,7 +15,49 @@
 #include "response.h"
 #include "util.h"
 
-const char *html_table_header =
+void send_file(int clientsd, const char *filepath) {
+  int fd = open(filepath, O_RDONLY);
+  if (fd < 0)
+    return; // file not found, ignore
+
+  struct stat st;
+  if (fstat(fd, &st) < 0) {
+    close(fd);
+    return;
+  }
+
+  char buf[BUFFER_SIZE];
+  char sizebuf[32];
+
+  write_header(clientsd, "Content-Type", get_mime_type(filepath));
+  snprintf(sizebuf, sizeof(sizebuf), "%lld", st.st_size);
+  write_header(clientsd, "Content-Length", sizebuf);
+  write_empty_line(clientsd);
+
+  ssize_t n;
+  while ((n = read(fd, buf, sizeof(buf))) > 0) {
+    ssize_t total_sent = 0;
+    while (total_sent < n) {
+      ssize_t sent = send(clientsd, buf + total_sent, n - total_sent, 0);
+      if (sent < 0) {
+        if (errno == EINTR)
+          continue;
+        perror("send failed");
+        close(fd);
+        return;
+      }
+      total_sent += sent;
+    }
+  }
+
+  if (n < 0) {
+    perror("read failed");
+  }
+
+  close(fd);
+}
+
+const char *html_header =
     "<!DOCTYPE html>"
     "<html>"
     "<head>"
@@ -35,36 +77,17 @@ const char *html_table_header =
     "colspan=\"5\"></td></tr>"
     "    <tr><td>&nbsp;</td></tr>";
 
-const char *html_table_footer = "  </table>"
-                                "</body>"
-                                "</html>";
+const char *html_footer = "  </table>"
+                          "</body>"
+                          "</html>";
 
-const char *html_file_seg = "    <tr>"
-                            "      <td><a  href=\"%s%s\">%s</a></td>"
-                            "      <td style=\"color:#888;\">[%s]</td>"
-                            "      <td><bold>%s</bold></td>"
-                            "    </tr>";
+const char *html_filetpl = "    <tr>"
+                           "      <td><a  href=\"%s%s\">%s</a></td>"
+                           "      <td style=\"color:#888;\">[%s]</td>"
+                           "      <td><bold>%s</bold></td>"
+                           "    </tr>";
 
-void send_file(int clientsd, const char *filename) {
-  char buf[BUFFER_SIZE];
-  ssize_t bytes_read;
-  int fd;
-
-  if ((fd = open(filename, O_RDONLY)) == -1) {
-    die("failed opening dir");
-  }
-
-  write_header(clientsd, "Content-Type", get_mime_type(filename));
-  write_empty_line(clientsd);
-
-  while ((bytes_read = read(fd, buf, BUFFER_SIZE)) > 0) {
-    send(clientsd, buf, bytes_read, 0);
-  }
-
-  close(fd);
-}
-
-void send_directory(int clientsd, const char *filepath) {
+void send_directory(int clientsd, const char *dirpath) {
   struct dirent *entry;
   DIR *dir;
   char buf[BUFFER_SIZE];
@@ -75,11 +98,11 @@ void send_directory(int clientsd, const char *filepath) {
   struct stat fstat;
   int errno;
 
-  if ((filepath_len = strlen(filepath)) >= BUFFER_SIZE) {
+  if ((filepath_len = strlen(dirpath)) >= BUFFER_SIZE) {
     die("unsupported long filepath");
   }
 
-  strncpy(path, filepath + 1, filepath_len);
+  strncpy(path, dirpath + 1, filepath_len);
   path[strlen(path)] = '\0';
 
   if (path[strlen(path) - 1] != '/') {
@@ -87,44 +110,43 @@ void send_directory(int clientsd, const char *filepath) {
     path[strlen(path) + 1] = '\0';
   }
 
-  if ((dir = opendir(filepath)) == NULL) {
+  if ((dir = opendir(dirpath)) == NULL) {
     die("opendir");
   }
 
   write_header(clientsd, "Content-Type", "text/html");
   write_empty_line(clientsd);
 
-  send(clientsd, html_table_header, strlen(html_table_header), 0);
+  send(clientsd, html_header, strlen(html_header), 0);
 
   while ((entry = readdir(dir)) != NULL) {
     if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) {
       continue;
     }
 
-    sprintf(buf, "%s%s", path, entry->d_name);
+    snprintf(buf, sizeof(buf), "%s%s", path, entry->d_name);
 
-    sprintf(filename, ".%s%s", path, entry->d_name);
+    snprintf(filename, sizeof(filename), ".%s%s", path, entry->d_name);
     if ((errno = stat(filename, &fstat)) == -1) {
-      sprintf(buf, "error: %s", strerror(errno));
+      snprintf(buf, sizeof(buf), "error: %s", strerror(errno));
       die(buf);
     }
 
     if (S_ISDIR(fstat.st_mode)) {
-      sprintf(entpath, "%s/", entry->d_name);
+      snprintf(entpath, sizeof(entpath), "%s/", entry->d_name);
     } else {
-      strncpy(entpath, entry->d_name, strlen(entry->d_name));
-      entpath[strlen(entry->d_name)] = '\0';
+      snprintf(entpath, sizeof(entpath), "%s", entry->d_name);
     }
 
     char *timestr = timefmt(&fstat.st_mtime, 0);
     char *sizestr = sizefmt(&fstat.st_size);
-    sprintf(buf, html_file_seg, path, entpath, entpath, timestr, sizestr);
+    snprintf(buf, sizeof(buf), html_filetpl, path, entpath, entpath, timestr,
+             sizestr);
     free(timestr);
     free(sizestr);
     send(clientsd, buf, strlen(buf), 0);
   }
 
-  send(clientsd, html_table_footer, strlen(html_table_footer), 0);
-
+  send(clientsd, html_footer, strlen(html_footer), 0);
   closedir(dir);
 }

@@ -19,7 +19,7 @@ void get_in_addr(char *buf, struct sockaddr *sa) {
   return;
 }
 
-void bind_listener_sock(int *serversd, u_short *port) {
+void bind_listener_sock(int *serversd, const char *host, u_short *port) {
   struct sockaddr_in sain;
   int option_value = 1;
 
@@ -34,7 +34,14 @@ void bind_listener_sock(int *serversd, u_short *port) {
   memset(&sain, 0, sizeof(sain));
   sain.sin_family = AF_INET; // ipv4
   sain.sin_port = htons(*port);
-  sain.sin_addr.s_addr = htonl(INADDR_ANY); // bind all available interface
+
+  if (host == NULL) {
+    sain.sin_addr.s_addr = htonl(INADDR_ANY); // bind all available interface
+  } else {
+    if (inet_pton(AF_INET, host, &sain.sin_addr) <= 0) {
+      die("invalid host IP");
+    }
+  }
 
   if (bind(*serversd, (struct sockaddr *)&sain, sizeof(sain)) < 0) {
     die("failed binding a name to a socket");
