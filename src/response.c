@@ -9,9 +9,9 @@
 #include "misc.h"
 #include "request.h"
 #include "response.h"
-#include "util.h"
+#include "status.h"
 
-void serve_file(int clientsd, const char *filepath) {
+void serve_file(int clientsd, const char *filepath, status_t *st) {
   char buf[BUFFER_SIZE];
   ssize_t bytes_read;
   struct stat fileinfo;
@@ -21,11 +21,15 @@ void serve_file(int clientsd, const char *filepath) {
     ;
 
   if (stat(filepath, &fileinfo)) {
-    die("stat");
+    st->code = 404;
+    st->text = "Not Found";
+    write_status(clientsd, st);
+    return;
   }
 
-  status_t st = status(200, "OK");
-  write_status(clientsd, &st);
+  st->code = 200;
+  st->text = "OK";
+  write_status(clientsd, st);
 
   if (S_ISDIR(fileinfo.st_mode)) {
     send_directory(clientsd, filepath);

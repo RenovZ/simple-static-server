@@ -7,6 +7,7 @@
 #define WITH_MICROSEC 2
 #define WITH_NANOSEC 3
 
+void decode_url(char *dst, const char *src);
 void die(const char *s);
 void logmsg(const char *format, ...);
 extern char *timefmt(const time_t *tt, int with_usec);

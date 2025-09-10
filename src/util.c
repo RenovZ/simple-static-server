@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +10,28 @@
 
 #include "misc.h"
 #include "util.h"
+
+// decode %xx in URL
+void decode_url(char *dst, const char *src) {
+  char a, b;
+  while (*src) {
+    if (*src == '%' && isxdigit((unsigned char)src[1]) &&
+        isxdigit((unsigned char)src[2])) {
+      a = src[1];
+      b = src[2];
+      a = (a >= 'A') ? ((a & 0xDF) - 'A' + 10) : (a - '0');
+      b = (b >= 'A') ? ((b & 0xDF) - 'A' + 10) : (b - '0');
+      *dst++ = (char)(16 * a + b);
+      src += 3;
+    } else if (*src == '+') {
+      *dst++ = ' ';
+      src++;
+    } else {
+      *dst++ = *src++;
+    }
+  }
+  *dst = '\0';
+}
 
 char *sizefmt(const long long *size) {
   char *sizestr = (char *)malloc(BUFFER_SIZE);

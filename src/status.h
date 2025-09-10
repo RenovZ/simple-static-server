@@ -5,11 +5,9 @@
 
 typedef struct {
   int code;
-  char *text;
-  size_t len;
+  const char *text;
 } status_t;
 
-#define status(code, text)                                                     \
-  { code, (char *)text, sizeof(text) - 1 }
+#define STATUS(code, text) {code, text}
 
 #endif
