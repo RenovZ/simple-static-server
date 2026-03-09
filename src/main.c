@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -17,7 +18,7 @@ void print_usage(char *name, u_short port) {
   printf("Options:\n");
   printf("  --user <name>       Username\n");
   printf("  --password <pass>   Password\n");
-  printf("  --host <host>       Host (default: localhost)\n");
+  printf("  --host <host>       Host (default: 0.0.0.0)\n");
   printf("  --port <port>       Port (default: %d, must be 1-65535)\n", port);
   printf("  [directory]         Target directory (default: .)\n");
 }
@@ -32,28 +33,29 @@ int main(int argc, char *argv[]) {
   char *host = "0.0.0.0";
   u_short port = 8000;
   char *directory = ".";
+  char root_path[MAX_PATH];
 
   static struct option long_options[] = {
-      {"user", required_argument, 0, 'U'},
+      {"user", required_argument, 0, 'u'},
       {"password", required_argument, 0, 'P'},
-      {"host", optional_argument, 0, 'H'},
-      {"port", optional_argument, 0, 'p'},
+      {"host", required_argument, 0, 'H'},
+      {"port", required_argument, 0, 'p'},
       {"help", no_argument, 0, 'h'},
       {0, 0, 0, 0}};
 
-  while ((opt = getopt_long(argc, argv, "u:p:H:P:h", long_options, NULL)) !=
+  while ((opt = getopt_long(argc, argv, "u:P:H:p:h", long_options, NULL)) !=
          -1) {
     switch (opt) {
     case 'u':
       user = optarg;
       break;
-    case 'p':
-      password = optarg;
-      break;
     case 'H':
       host = optarg;
       break;
-    case 'P': {
+    case 'P':
+      password = optarg;
+      break;
+    case 'p': {
       char *endptr;
       errno = 0;
       long val = strtoul(optarg, &endptr, 10);
@@ -76,6 +78,10 @@ int main(int argc, char *argv[]) {
     directory = argv[optind];
   }
 
+  if (realpath(directory, root_path) == NULL) {
+    die("failed resolving target directory");
+  }
+
   int serversd = -1;
   int clientsd = -1;
   struct sockaddr clientsa;
@@ -91,20 +97,39 @@ int main(int argc, char *argv[]) {
   while (1) {
     clientsd = accept(serversd, &clientsa, &clientsa_len);
 
-    get_in_addr(addrstr, &clientsa);
-
-    request_params params = {.clientsd = clientsd,
-                             .user = user,
-                             .password = password,
-                             .path = directory,
-                             .addrstr = addrstr};
-
     if (clientsd == -1)
       die("failed accepting request");
 
-    if (pthread_create(&newthread, NULL, handle_request, &params) != 0) {
-      perror("failed creating thread");
+    request_params *params = malloc(sizeof(*params));
+    if (params == NULL) {
+      close(clientsd);
+      perror("failed allocating request params");
+      continue;
     }
+
+    get_in_addr(addrstr, &clientsa);
+    params->clientsd = clientsd;
+    params->user = user;
+    params->password = password;
+    params->path = root_path;
+    params->addrstr = strdup(addrstr);
+
+    if (params->addrstr == NULL) {
+      close(clientsd);
+      free(params);
+      perror("failed duplicating client address");
+      continue;
+    }
+
+    if (pthread_create(&newthread, NULL, handle_request, params) != 0) {
+      perror("failed creating thread");
+      close(clientsd);
+      free(params->addrstr);
+      free(params);
+      continue;
+    }
+
+    pthread_detach(newthread);
   }
 
   close(serversd);

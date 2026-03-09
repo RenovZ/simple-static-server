@@ -11,6 +11,60 @@
 #include "status.h"
 #include "util.h"
 
+static int build_filesystem_path(char *dst, size_t dst_size, const char *root,
+                                 const char *url) {
+  char normalized[BUFFER_SIZE];
+  size_t normalized_len = 0;
+  const char *cursor = url;
+
+  if (root == NULL || url == NULL || dst_size == 0 || url[0] != '/') {
+    return -1;
+  }
+
+  normalized[normalized_len++] = '/';
+  while (*cursor != '\0') {
+    while (*cursor == '/') {
+      cursor++;
+    }
+
+    if (*cursor == '\0') {
+      break;
+    }
+
+    const char *segment_start = cursor;
+    while (*cursor != '/' && *cursor != '\0') {
+      cursor++;
+    }
+
+    size_t segment_len = cursor - segment_start;
+    if (segment_len == 1 && strncmp(segment_start, ".", 1) == 0) {
+      continue;
+    }
+
+    if (segment_len == 2 && strncmp(segment_start, "..", 2) == 0) {
+      return -1;
+    }
+
+    if (normalized_len > 1) {
+      normalized[normalized_len++] = '/';
+    }
+
+    if (normalized_len + segment_len >= sizeof(normalized)) {
+      return -1;
+    }
+
+    memcpy(normalized + normalized_len, segment_start, segment_len);
+    normalized_len += segment_len;
+  }
+
+  normalized[normalized_len] = '\0';
+  if (snprintf(dst, dst_size, "%s%s", root, normalized) >= (int)dst_size) {
+    return -1;
+  }
+
+  return 0;
+}
+
 void *handle_request(void *req_params) {
   request_params *params = (request_params *)req_params;
   int sock = params->clientsd;
@@ -18,9 +72,8 @@ void *handle_request(void *req_params) {
   size_t numchars;
   char method[255];
   char url[BUFFER_SIZE];
-  char path[BUFFER_SIZE];
   char url_decoded[BUFFER_SIZE];
-  char path_decoded[BUFFER_SIZE];
+  char filepath[MAX_PATH];
   size_t i, j;
 
   numchars = read_line(sock, buf, sizeof(buf));
@@ -43,20 +96,23 @@ void *handle_request(void *req_params) {
   }
   url[i] = '\0';
 
-  if (params->path != NULL) {
-    snprintf(path, sizeof(path), "%s%s", params->path, url);
-  } else {
-    snprintf(path, sizeof(path), ".%s", url);
-  }
-
-  decode_url(path_decoded, path);
-
   status_t st;
-  serve_file(sock, path_decoded, &st);
+  decode_url(url_decoded, url);
+  if (build_filesystem_path(filepath, sizeof(filepath), params->path,
+                            url_decoded) != 0) {
+    st.code = 403;
+    st.text = "Forbidden";
+    write_status(sock, &st);
+    write_empty_line(sock);
+  } else {
+    serve_file(sock, filepath, url_decoded, &st);
+  }
   close(sock);
 
-  decode_url(url_decoded, url);
   logmsg("%22s %d %8s %s", params->addrstr, st.code, method, url_decoded);
+
+  free(params->addrstr);
+  free(params);
 
   return NULL;
 }

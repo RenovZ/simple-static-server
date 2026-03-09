@@ -87,23 +87,27 @@ const char *html_filetpl = "    <tr>"
                            "      <td><bold>%s</bold></td>"
                            "    </tr>";
 
-void send_directory(int clientsd, const char *dirpath) {
+void send_directory(int clientsd, const char *dirpath, const char *urlpath) {
   struct dirent *entry;
   DIR *dir;
   char buf[BUFFER_SIZE];
-  char path[2 * BUFFER_SIZE]; // fix: how to deal with long filename gracefully
+  char path[2 * BUFFER_SIZE];
   char entpath[BUFFER_SIZE];
-  char filename[BUFFER_SIZE];
-  unsigned long filepath_len;
+  char filename[2 * BUFFER_SIZE];
+  unsigned long urlpath_len;
   struct stat fstat;
   int errno;
 
-  if ((filepath_len = strlen(dirpath)) >= BUFFER_SIZE) {
-    die("unsupported long filepath");
+  if ((urlpath_len = strlen(urlpath)) >= sizeof(path)) {
+    die("unsupported long urlpath");
   }
 
-  strncpy(path, dirpath + 1, filepath_len);
-  path[strlen(path)] = '\0';
+  strncpy(path, urlpath, sizeof(path) - 1);
+  path[sizeof(path) - 1] = '\0';
+
+  if (path[0] == '\0') {
+    strcpy(path, "/");
+  }
 
   if (path[strlen(path) - 1] != '/') {
     path[strlen(path)] = '/';
@@ -126,7 +130,7 @@ void send_directory(int clientsd, const char *dirpath) {
 
     snprintf(buf, sizeof(buf), "%s%s", path, entry->d_name);
 
-    snprintf(filename, sizeof(filename), ".%s%s", path, entry->d_name);
+    snprintf(filename, sizeof(filename), "%s/%s", dirpath, entry->d_name);
     if ((errno = stat(filename, &fstat)) == -1) {
       snprintf(buf, sizeof(buf), "error: %s", strerror(errno));
       die(buf);

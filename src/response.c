@@ -11,7 +11,8 @@
 #include "response.h"
 #include "status.h"
 
-void serve_file(int clientsd, const char *filepath, status_t *st) {
+void serve_file(int clientsd, const char *filepath, const char *urlpath,
+                status_t *st) {
   char buf[BUFFER_SIZE];
   ssize_t bytes_read;
   struct stat fileinfo;
@@ -32,7 +33,7 @@ void serve_file(int clientsd, const char *filepath, status_t *st) {
   write_status(clientsd, st);
 
   if (S_ISDIR(fileinfo.st_mode)) {
-    send_directory(clientsd, filepath);
+    send_directory(clientsd, filepath, urlpath);
   } else {
     send_file(clientsd, filepath);
   }
