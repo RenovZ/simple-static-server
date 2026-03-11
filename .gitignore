@@ -1,3 +1,5 @@
 /obj
 *.o
 3s
+.zig-cache/
+zig-out/
